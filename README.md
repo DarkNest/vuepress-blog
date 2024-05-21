@@ -7,6 +7,6 @@
 [vuepress官网](https://v2.vuepress.vuejs.org/zh/)
 
 ```
-启动项目
+//启动项目
 npm run docs:dev
 ```
