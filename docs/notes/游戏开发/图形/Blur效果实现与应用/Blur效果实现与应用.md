@@ -76,10 +76,130 @@ Kawase 模糊的基本原理也是利用卷积进行模糊，与高斯和方框�
 1. RenderFeature + RenderPass
 2. RenderPipelineManager + RenderPass
 
+本文中的示例都将采用高斯模糊，根据实际项目情况，也可以采用方框模糊或双重模糊等算法。
+
 ### 1、RenderPass 部分
+在URP管线中，**RenderPass** 的主要作用是负责Shader的具体执行，编写 **BlurPass** 脚本，需要继承并实现 **ScriptableRenderPass**。
+
+在代码中，我们将 **renderPassEvent** 设置为了 **RenderPassEvent.AfterRenderingTransparents**，那么在渲染过程中，这个BlurPass的渲染相关操作将在Transparents被渲染之后执行。
+
+由于卷积操作需要申请 **RenderTexture**，为了减少RT占用内存，我们使用 **void SwitchBuffer(ref int src, ref int tar)** 来在两张RT上来回卷积，从而减少内存占用
+
+此外，由于是模糊效果，即使降低RT的尺寸，对最终效果的影响也不会太大，却可以大幅降低RT所占用的内存，这也是一种常用的优化策略。
+
+在FrameDebug中，我们可以看到BlurPass具体的DC执行情况、渲染目标、材质参数、缓存buffer等情况
+
+![FrameDebug](./res/pic06.jpg)
 
 ``` csharp
+using System;
+using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
+
+public class BlurPass : ScriptableRenderPass
+{
+    private Material material;
+    private const string bufferName = "_PostBuffer";
+
+	BlurConfig cameraConfig = new BlurConfig();
+
+	[Serializable]
+	public class BlurConfig
+	{
+		public int iter;
+		public float factor;
+		public float rtScale;
+	}
+
+	#region 渲染相关
+	public BlurPass(Material mat)
+    {
+        material = mat;
+		renderPassEvent = RenderPassEvent.AfterRenderingTransparents;
+    }
+
+	public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
+	{
+		BlurConfig config = cameraConfig;
+		RenderTargetIdentifier camTarget = renderingData.cameraData.renderer.cameraColorTarget;
+		ProcessPosEffect(context, camTarget, config);
+	}
+
+	private void ProcessPosEffect(ScriptableRenderContext context, RenderTargetIdentifier camTarget, BlurConfig config)
+	{
+		if (config.iter == 0)
+			return;
+
+		CommandBuffer cmd = CommandBufferPool.Get("BlurPass");
+
+		int temp0 = Shader.PropertyToID(bufferName + "_0");
+		int temp1 = Shader.PropertyToID(bufferName + "_1");
+
+		int rtW = (int)(Screen.width * config.rtScale);
+		int rtH = (int)(Screen.height * config.rtScale);
+		cmd.GetTemporaryRT(temp0, rtW, rtH, 0);		
+		if(config.iter > 1)
+			cmd.GetTemporaryRT(temp1, rtW, rtH, 0);
+
+		//设置材质属性
+		float hori = config.factor / Screen.width;
+		float vert = config.factor / Screen.height;
+		material.SetFloat("blurFactorX", hori);
+		material.SetFloat("blurFactorY", vert);
+
+		//模糊处理
+		int src = temp0;
+		int tar = temp1;
+
+		cmd.Blit(camTarget, temp0, material, 0);
+		for (int i = 1; i < config.iter; i++)
+		{
+			//纵向
+			cmd.Blit(src, tar, material, 1);
+			SwitchBuffer(ref src, ref tar);
+
+			//横向
+			cmd.Blit(src, tar, material, 0);
+			SwitchBuffer(ref src, ref tar);
+		}
+		//渲染到相机输出纹理
+		cmd.Blit(src, camTarget, material, 1);
+
+		//执行后处理		
+		context.ExecuteCommandBuffer(cmd);
+
+		//释放缓存
+		cmd.ReleaseTemporaryRT(temp0);
+		if(config.iter > 1)
+			cmd.ReleaseTemporaryRT(temp1);
+
+		CommandBufferPool.Release(cmd);
+	}
+	#endregion
+
+	#region 对外接口
+
+	public void SetCameraBlurParams(BlurConfig config)
+	{
+		cameraConfig = config;
+	}
+	#endregion
+
+    private void SwitchBuffer(ref int src, ref int tar)
+    {
+        int temp = src;
+        src = tar;
+        tar = temp;
+    }
+}
+
 ```
+
+### 2、Shader 部分
+``` hlsl
+```
+
 
 ## 四、利用Blur实现UI背景模糊
 ## 五、直接模糊Texture
