@@ -50,25 +50,13 @@ export default defineUserConfig({
                 ],
             },
             {
-                text: '项目实战',
+                text: '美术技巧',
                 children: [
                     {
-                        text: '基于帧同步的MOBA',
-                        link: '/notes/项目实战/基于帧同步的MOBA/',
-                    },
-                    {
-                        text: '基于状态同步的MMO',
-                        link: '/notes/项目实战/基于状态同步的MMO/',
+                        text: '像素艺术',
+                        link: '/notes/美术技巧/像素艺术/',
                     },
                 ],
-            },
-            {
-                text: '番剧赏评',
-                link: '/notes/番剧赏评/',
-            },
-            {
-                text: '游戏赏评',
-                link: '/notes/游戏赏评/',
             },
         ],
 
